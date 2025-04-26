@@ -6,7 +6,7 @@ import piexif
 from PIL import Image
 from PIL.ExifTags import TAGS, GPSTAGS
 from geopy.geocoders import Nominatim
-from datetime import datetime
+from datetime import datetime, timezone
 from tqdm import tqdm
 
 # Variable globale pour le geolocator
@@ -46,6 +46,7 @@ def get_coordinates(gps_info):
         return None, None
 
 def get_lat_lon(filepath, json_data):
+    """Extrait latitude et longitude soit du JSON soit de l'EXIF."""
     lat, lon = None, None
 
     if json_data and "geoDataExif" in json_data:
@@ -58,6 +59,7 @@ def get_lat_lon(filepath, json_data):
         except (ValueError, TypeError):
             lat, lon = None, None
 
+    # Si pas de coordonnées valides, essayer via EXIF
     if lat is None or lon is None:
         exif = get_exif_data(filepath)
         gps_info = exif.get("GPSInfo", {})
@@ -103,40 +105,32 @@ def calculate_md5(file_path):
     return hash_md5.hexdigest()
 
 def deg_to_dms_rational(deg_float):
+    """Convertit un float degré en format DMS rationnel pour EXIF"""
     deg = int(deg_float)
     min_float = (deg_float - deg) * 60
     min = int(min_float)
     sec = round((min_float - min) * 60 * 100)
     return ((deg, 1), (min, 1), (sec, 100))
 
-def clean_exif_dict(exif_dict):
-    for ifd in ("0th", "Exif", "GPS", "1st"):
-        if ifd in exif_dict:
-            tags = exif_dict[ifd]
-            keys_to_delete = []
-            for tag, value in tags.items():
-                if isinstance(value, int):
-                    keys_to_delete.append(tag)
-            for tag in keys_to_delete:
-                del tags[tag]
-    return exif_dict
-
 def write_exif_from_json(filepath, json_data):
+    """Ajoute les données JSON dans l'EXIF du JPG"""
     if not json_data:
         return
 
     exif_dict = piexif.load(filepath)
 
+    # Ajouter Date
     if "photoTakenTime" in json_data:
         try:
             timestamp = int(json_data["photoTakenTime"]["timestamp"])
-            dt = datetime.utcfromtimestamp(timestamp)
+            dt = datetime.fromtimestamp(timestamp, tz=timezone.utc)
             dt_str = dt.strftime("%Y:%m:%d %H:%M:%S")
             exif_dict['Exif'][piexif.ExifIFD.DateTimeOriginal] = dt_str.encode('utf-8')
             exif_dict['0th'][piexif.ImageIFD.DateTime] = dt_str.encode('utf-8')
         except Exception:
             pass
 
+    # Ajouter GPS
     if "geoDataExif" in json_data:
         geo = json_data["geoDataExif"]
         lat = geo.get("latitude")
@@ -150,7 +144,6 @@ def write_exif_from_json(filepath, json_data):
             }
             exif_dict['GPS'] = gps_ifd
 
-    exif_dict = clean_exif_dict(exif_dict)
     exif_bytes = piexif.dump(exif_dict)
     piexif.insert(exif_bytes, filepath)
 
@@ -193,7 +186,7 @@ def process_file(filepath, source_folder):
     if json_data and "photoTakenTime" in json_data:
         try:
             timestamp = int(json_data["photoTakenTime"]["timestamp"])
-            date_obj = datetime.utcfromtimestamp(timestamp)
+            date_obj = datetime.fromtimestamp(timestamp, tz=timezone.utc)
             date_formatted = date_obj.strftime("%Y-%m-%d")
         except Exception:
             pass
