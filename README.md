@@ -1,45 +1,56 @@
-# 📸 Script d'Organisation de Photos et Vidéos
 
-![Python](https://img.shields.io/badge/Python-3.8%2B-blue.svg) ![License](https://img.shields.io/badge/License-MIT-green.svg)
+# Organisateur de Photos et Vidéos (avec Géolocalisation)
 
-Ce script organise automatiquement vos **photos** et **vidéos** (`.jpg`, `.jpeg`, `.png`, `.mp4`) en les triant par **date** et **lieu** à partir des **métadonnées EXIF** ou des **fichiers JSON** générés par **Google Takeout**.
+## Description
+Ce script organise vos photos et vidéos (formats `.jpg`, `.jpeg`, `.png`, `.mp4`) en fonction de la date de prise de vue et de la géolocalisation (latitude et longitude). Il ajoute également des métadonnées EXIF pour les photos et des métadonnées de géolocalisation dans les fichiers MP4.
 
-Il détecte et déplace aussi les **doublons**.
+## Fonctionnalités
+- Trie les photos et vidéos dans des dossiers organisés par date et emplacement.
+- Ajoute les informations de géolocalisation (latitude et longitude) dans les métadonnées EXIF des photos.
+- Ajoute les métadonnées de géolocalisation dans les fichiers MP4 (avec `mutagen`).
+- Détecte et déplace les doublons vers un dossier spécifique.
 
----
+## Prérequis
+- Python 3.x
+- Les bibliothèques suivantes sont nécessaires :
+  - `geopy` (pour obtenir les informations de localisation)
+  - `piexif` (pour manipuler les métadonnées EXIF des photos)
+  - `mutagen` (pour manipuler les métadonnées des vidéos MP4)
+  - `Pillow` (pour traiter les images)
+  - `tqdm` (pour afficher une barre de progression)
 
-## ✨ Fonctionnalités
-
-- 🔎 Lecture automatique des métadonnées EXIF et JSON.
-- 🗂️ Classement des fichiers dans des dossiers `AAAA-MM-JJ_Lieu`.
-- 🛰️ Utilisation des coordonnées GPS pour nommer les lieux.
-- 🧹 Détection et déplacement automatique des doublons.
-- 🌍 Géolocalisation via Nominatim OpenStreetMap.
-- ⚙️ Compatible avec Python 3.8 à 3.12+.
-
----
-
-## 📥 Télécharger vos Photos avec Google Takeout
-
-1. Allez sur [Google Takeout](https://takeout.google.com/).
-2. Cliquez sur "**Désélectionner tout**".
-3. Sélectionnez uniquement "**Google Photos**".
-4. Cliquez sur "**Tous les albums photo inclus**" pour affiner votre sélection si besoin.
-5. Cliquez sur "**Suivant**".
-6. Choisissez :
-   - **Type d’exportation** : une seule fois
-   - **Type de fichier** : `.zip`
-   - **Taille du fichier** : 2 Go (ou plus selon votre espace disque)
-7. Cliquez sur "**Créer une exportation**" et attendez.
-8. Téléchargez et extrayez votre archive.
-
-> **Important** : Les fichiers `.json` générés sont essentiels pour retrouver les métadonnées.
-
----
-
-## ⚙️ Installation des dépendances
-
-Installez les bibliothèques requises :
-
+Vous pouvez installer ces bibliothèques via pip :
 ```bash
-pip install pillow piexif geopy tqdm
+pip install geopy piexif mutagen Pillow tqdm
+```
+
+## Procédure pour télécharger les photos et vidéos de Google Photos via Google Takeout
+1. Allez sur [Google Takeout](https://takeout.google.com/) et sélectionnez les données que vous souhaitez télécharger (Photos et Vidéos).
+2. Assurez-vous de sélectionner l'option pour télécharger les fichiers dans leur format original (cela inclura les fichiers EXIF et vidéo).
+3. Téléchargez l'archive ZIP une fois qu'elle est prête.
+4. Extrayez l'archive ZIP dans un dossier de votre choix.
+5. Passez ce dossier en argument du script pour organiser vos fichiers.
+
+## Utilisation
+1. Téléchargez ou clonez ce script sur votre ordinateur.
+2. Exécutez le script en utilisant la commande suivante :
+```bash
+python photo_organizer.py
+```
+3. Le script vous demandera :
+   - Le chemin vers le dossier contenant vos photos et vidéos.
+   - Si vous souhaitez déplacer les doublons détectés dans un dossier spécifique.
+   - Votre adresse email pour le user-agent Nominatim (utilisé pour récupérer des informations de localisation).
+
+Le script triera ensuite vos fichiers en fonction de la date et de l'emplacement, et ajoutera les métadonnées appropriées.
+
+## Exemple de sortie
+Les fichiers seront organisés dans des dossiers du type :
+```
+YYYY-MM-DD_Location
+```
+Où `YYYY-MM-DD` est la date de prise de vue et `Location` est le lieu associé.
+
+## Avertissements
+- Le script ne modifie que les fichiers EXIF des photos et les métadonnées des vidéos MP4 (en ajoutant la géolocalisation).
+- Assurez-vous de ne pas avoir de fichiers en double dans le dossier source, sauf si vous souhaitez qu'ils soient déplacés dans le dossier des doublons.
