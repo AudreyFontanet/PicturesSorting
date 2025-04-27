@@ -2,7 +2,7 @@
 # Organisateur de Photos et Vidéos (avec Géolocalisation)
 
 ## Description
-Ce script organise vos photos et vidéos (formats `.jpg`, `.jpeg`, `.png`, `.mp4`) en fonction de la date de prise de vue et de la géolocalisation (latitude et longitude). Il ajoute également des métadonnées EXIF pour les photos et des métadonnées de géolocalisation dans les fichiers MP4.
+Ce script organise vos photos et vidéos (formats `.jpg`, `.jpeg`, `.png`, `.mp4`, `.mov`, `.avi`, `.mkv`) en fonction de la date de prise de vue et de la géolocalisation (latitude et longitude). Il ajoute également des métadonnées EXIF pour les photos et des métadonnées de géolocalisation dans les fichiers MP4.
 
 ## Fonctionnalités
 - Trie les photos et vidéos dans des dossiers organisés par date et emplacement.
