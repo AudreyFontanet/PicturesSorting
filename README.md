@@ -2,7 +2,7 @@
 # Organisateur de Photos et Vidéos (avec Géolocalisation)
 
 ## Description
-Ce script organise vos photos et vidéos (formats `.jpg`, `.jpeg`, `.png`, `.mp4`, `.mov`, `.avi`, `.mkv`) en fonction de la date de prise de vue et de la géolocalisation (latitude et longitude). Il ajoute également des métadonnées EXIF pour les photos et des métadonnées de géolocalisation dans les fichiers MP4.
+Ce script organise vos photos et vidéos (formats `.jpg`, `.jpeg`, `.png`, `.mp4`) en fonction de la date de prise de vue et de la géolocalisation (latitude et longitude). Il ajoute également des métadonnées EXIF pour les photos et des métadonnées de géolocalisation dans les fichiers MP4.
 
 ## Fonctionnalités
 - Trie les photos et vidéos dans des dossiers organisés par date et emplacement.
@@ -11,20 +11,9 @@ Ce script organise vos photos et vidéos (formats `.jpg`, `.jpeg`, `.png`, `.mp4
 - Détecte et déplace les doublons vers un dossier spécifique.
 
 ## Prérequis
-- Python 3.x
-- Les bibliothèques suivantes sont nécessaires :
-  - `geopy` (pour obtenir les informations de localisation)
-  - `piexif` (pour manipuler les métadonnées EXIF des photos)
-  - `mutagen` (pour manipuler les métadonnées des vidéos MP4)
-  - `Pillow` (pour traiter les images)
-  - `tqdm` (pour afficher une barre de progression)
-  - `ffmpeg` (pour manipuler les métadonnées des autres format vidéo)
-
-Téléchargez ffmpeg ici : https://ffmpeg.org/download.html.
-Assurez-vous que ffmpeg est installé et que le binaire est dans le PATH de votre système
-Ensuite, vous pouvez installer ces bibliothèques via pip :
+Avant de pouvoir exécuter ce script, assurez-vous d'avoir installé toutes les dépendances nécessaires. Vous pouvez installer ces dépendances via `pip` :
 ```bash
-pip install geopy piexif mutagen Pillow tqdm ffmpeg-python
+pip install geopy piexif mutagen Pillow tqdm
 ```
 
 ## Procédure pour télécharger les photos et vidéos de Google Photos via Google Takeout
@@ -54,4 +43,4 @@ YYYY-MM-DD_Location
 ```
 Où `YYYY-MM-DD` est la date de prise de vue et `Location` est le lieu associé.
 
-Les metadonnées ou EXIF des fichiers organisés contiendront la géolocalisation extraite. 
+Le script met à jour les informations EXIF pour les images et les métadonnées MP4 pour les vidéos avec la date et la géolocalisation.
