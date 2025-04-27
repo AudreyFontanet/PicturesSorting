@@ -1,4 +1,3 @@
-
 import os
 import json
 import shutil
@@ -9,14 +8,13 @@ from PIL.ExifTags import TAGS, GPSTAGS
 from geopy.geocoders import Nominatim
 from datetime import datetime
 from tqdm import tqdm
-from mutagen.mp4 import MP4
-from mutagen.id3 import ID3
-from mutagen.id3 import TIT2, TPE1
+import ffmpeg  # Nouvelle bibliothèque pour manipuler les métadonnées vidéo
 
 # Variable globale pour le geolocator
 geolocator = None
 
 def get_exif_data(filepath):
+    """Extrait les métadonnées EXIF d'une image (JPG, PNG)"""
     img = Image.open(filepath)
     exif_data = {}
     info = img._getexif()
@@ -33,21 +31,22 @@ def get_exif_data(filepath):
                 exif_data[decoded] = value
     return exif_data
 
-def convert_to_degrees(value):
-    d, m, s = value
-    return d[0] / d[1] + (m[0] / m[1]) / 60 + (s[0] / s[1]) / 3600
-
-def get_coordinates(gps_info):
+def get_video_metadata(filepath):
+    """Extrait les métadonnées d'un fichier vidéo (.mp4, .mov, etc.)"""
     try:
-        lat = convert_to_degrees(gps_info['GPSLatitude'])
-        if gps_info.get('GPSLatitudeRef') != 'N':
-            lat = -lat
-        lon = convert_to_degrees(gps_info['GPSLongitude'])
-        if gps_info.get('GPSLongitudeRef') != 'E':
-            lon = -lon
-        return lat, lon
-    except (KeyError, TypeError):
-        return None, None
+        probe = ffmpeg.probe(filepath, v='error', select_streams='v:0', show_entries='stream=tags')
+        return probe['streams'][0]['tags']
+    except ffmpeg.Error:
+        return {}
+
+def write_video_metadata(filepath, latitude, longitude):
+    """Écrit les métadonnées GPS dans un fichier vidéo (par exemple .mp4, .mov)"""
+    location_tag = f"{latitude},{longitude}"
+    try:
+        ffmpeg.input(filepath).output(filepath, metadata=f"location={location_tag}").run(overwrite_output=True)
+        print(f"✅ Métadonnées géographiques ajoutées au fichier vidéo : {filepath}")
+    except ffmpeg.Error as e:
+        print(f"❌ Erreur lors de l'ajout des métadonnées vidéo : {e}")
 
 def get_lat_lon(filepath, json_data):
     lat, lon = None, None
@@ -106,71 +105,32 @@ def calculate_md5(file_path):
             hash_md5.update(chunk)
     return hash_md5.hexdigest()
 
-def deg_to_dms_rational(deg_float):
-    deg = int(deg_float)
-    min_float = (deg_float - deg) * 60
-    min = int(min_float)
-    sec = round((min_float - min) * 60 * 100)
-    return ((deg, 1), (min, 1), (sec, 100))
-
-def clean_exif_dict(exif_dict):
-    for ifd in ("0th", "Exif", "GPS", "1st"):
-        if ifd in exif_dict:
-            tags = exif_dict[ifd]
-            keys_to_delete = []
-            for tag, value in tags.items():
-                if isinstance(value, int):
-                    keys_to_delete.append(tag)
-            for tag in keys_to_delete:
-                del tags[tag]
-    return exif_dict
-
-def write_exif_from_json(filepath, json_data):
-    if not json_data:
-        return
-
-    exif_dict = piexif.load(filepath)
-
-    if "photoTakenTime" in json_data:
-        try:
-            timestamp = int(json_data["photoTakenTime"]["timestamp"])
-            dt = datetime.utcfromtimestamp(timestamp)
-            dt_str = dt.strftime("%Y:%m:%d %H:%M:%S")
-            exif_dict['Exif'][piexif.ExifIFD.DateTimeOriginal] = dt_str.encode('utf-8')
-            exif_dict['0th'][piexif.ImageIFD.DateTime] = dt_str.encode('utf-8')
-        except Exception:
-            pass
-
-    if "geoDataExif" in json_data:
-        geo = json_data["geoDataExif"]
-        lat = geo.get("latitude")
-        lon = geo.get("longitude")
-        if lat and lon:
-            gps_ifd = {
-                piexif.GPSIFD.GPSLatitudeRef: 'N'.encode('utf-8') if lat >= 0 else 'S'.encode('utf-8'),
-                piexif.GPSIFD.GPSLatitude: deg_to_dms_rational(abs(lat)),
-                piexif.GPSIFD.GPSLongitudeRef: 'E'.encode('utf-8') if lon >= 0 else 'W'.encode('utf-8'),
-                piexif.GPSIFD.GPSLongitude: deg_to_dms_rational(abs(lon)),
-            }
-            exif_dict['GPS'] = gps_ifd
-
-    exif_dict = clean_exif_dict(exif_dict)
-    exif_bytes = piexif.dump(exif_dict)
-    piexif.insert(exif_bytes, filepath)
-
-def add_location_to_mp4(filepath, lat, lon):
-    video = MP4(filepath)
-    # Ajoute les informations de géolocalisation dans les tags
-    video["©gen"] = f"Latitude: {lat}, Longitude: {lon}"
-    video.save()
+def move_to_doublons(filepath, doublons_folder):
+    filename = os.path.basename(filepath)
+    doublon_path = os.path.join(doublons_folder, filename)
+    count = 1
+    while os.path.exists(doublon_path):
+        name, ext = os.path.splitext(filename)
+        doublon_path = os.path.join(doublons_folder, f"{name}_dup{count}{ext}")
+        count += 1
+    shutil.move(filepath, doublon_path)
 
 def process_file(filepath, source_folder):
     filename = os.path.basename(filepath)
     json_data = read_json(filepath)
 
-    if json_data:
-        write_exif_from_json(filepath, json_data)
+    # Gestion des fichiers image (EXIF)
+    if filename.lower().endswith((".jpg", ".jpeg", ".png")):
+        if json_data:
+            write_exif_from_json(filepath, json_data)
 
+    # Gestion des fichiers vidéo
+    if filename.lower().endswith((".mp4", ".mov", ".avi", ".mkv")):
+        lat, lon = get_lat_lon(filepath, json_data)
+        if lat and lon:
+            write_video_metadata(filepath, lat, lon)
+
+    # Organisation des fichiers
     date_formatted = "Unknown_Date"
     if json_data and "photoTakenTime" in json_data:
         try:
@@ -189,7 +149,6 @@ def process_file(filepath, source_folder):
             except Exception:
                 pass
 
-    lat, lon = get_lat_lon(filepath, json_data)
     location = get_location(lat, lon)
     folder_name = f"{date_formatted}_{location}"
     folder_path = os.path.join(source_folder, folder_name)
@@ -199,19 +158,6 @@ def process_file(filepath, source_folder):
     if os.path.abspath(filepath) != os.path.abspath(destination):
         shutil.move(filepath, destination)
 
-    if filename.lower().endswith(".mp4") and lat is not None and lon is not None:
-        add_location_to_mp4(filepath, lat, lon)
-
-def move_to_doublons(filepath, doublons_folder):
-    filename = os.path.basename(filepath)
-    doublon_path = os.path.join(doublons_folder, filename)
-    count = 1
-    while os.path.exists(doublon_path):
-        name, ext = os.path.splitext(filename)
-        doublon_path = os.path.join(doublons_folder, f"{name}_dup{count}{ext}")
-        count += 1
-    shutil.move(filepath, doublon_path)
-
 def organize_photos(source_folder, move_duplicates=True, doublons_folder=None):
     if move_duplicates:
         doublons_folder = doublons_folder or os.path.join(source_folder, "Doublons")
@@ -220,12 +166,12 @@ def organize_photos(source_folder, move_duplicates=True, doublons_folder=None):
     size_dict = {}
     for root, _, files in os.walk(source_folder):
         for filename in files:
-            if filename.lower().endswith((".jpg", ".jpeg", ".png", ".mp4")):
+            if filename.lower().endswith((".jpg", ".jpeg", ".png", ".mp4", ".mov", ".avi", ".mkv")):
                 filepath = os.path.join(root, filename)
                 size = os.path.getsize(filepath)
                 size_dict.setdefault(size, []).append(filepath)
 
-    for size, filepaths in tqdm(size_dict.items(), desc="Organisation des photos"):
+    for size, filepaths in tqdm(size_dict.items(), desc="Organisation des fichiers"):
         if len(filepaths) == 1:
             filepath = filepaths[0]
             process_file(filepath, source_folder)
@@ -241,7 +187,7 @@ def organize_photos(source_folder, move_duplicates=True, doublons_folder=None):
                     process_file(filepath, source_folder)
 
 if __name__ == "__main__":
-    source_folder = input("📁 Chemin vers le dossier contenant les photos : ").strip('"')
+    source_folder = input("📁 Chemin vers le dossier contenant les fichiers : ").strip('"')
     if not os.path.isdir(source_folder):
         print("❌ Dossier introuvable. Vérifie le chemin.")
         exit(1)
