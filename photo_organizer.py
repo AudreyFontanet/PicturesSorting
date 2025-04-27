@@ -46,24 +46,67 @@ def get_coordinates(gps_info):
     except (KeyError, TypeError):
         return None, None
 
+def get_date(filepath, json_data):
+    date_taken = None
+    if filepath.lower().endswith((".jpg", ".jpeg", ".png")):
+        exif = get_exif_data(filepath)
+        date_taken = exif.get("DateTimeOriginal") or exif.get("DateTime")
+        if date_taken:
+            try:
+                date_taken = datetime.strptime(date_taken, "%Y:%m:%d %H:%M:%S")
+            except Exception:
+                date_taken = None
+    elif filepath.lower().endswith(".mp4"):
+        try:
+            video = MP4(filepath)
+            date_taken = video.get("\xa9day", None)
+            if date_taken:
+                try:
+                    date_taken = datetime.strptime(date_taken, "%Y-%m-%d")
+                except Exception:
+                    date_taken = None
+        except Exception:
+            pass
+    if date_taken is None and json_data and "photoTakenTime" in json_data:
+        try:
+            timestamp = int(json_data["photoTakenTime"]["timestamp"])
+            date_taken = datetime.fromtimestamp(timestamp, datetime.UTC)
+        except Exception:
+            pass
+    if date_taken is None:
+        return "Unknown_Date"
+    return date_taken.strftime("%Y-%m-%d")
+
+
 def get_lat_lon(filepath, json_data):
     lat, lon = None, None
-
-    if json_data and "geoDataExif" in json_data:
-        geo = json_data["geoDataExif"]
-        lat = geo.get("latitude")
-        lon = geo.get("longitude")
-        try:
-            lat = float(lat) if lat is not None else None
-            lon = float(lon) if lon is not None else None
-        except (ValueError, TypeError):
-            lat, lon = None, None
-
-    if lat is None or lon is None:
+    if filepath.lower().endswith((".jpg", ".jpeg", ".png")):
         exif = get_exif_data(filepath)
         gps_info = exif.get("GPSInfo", {})
         if gps_info:
             lat, lon = get_coordinates(gps_info)
+
+    elif filepath.lower().endswith(".mp4"):
+        try:
+            video = MP4(filepath)
+            location_str = video.get("\xa9cmt", None)
+            if location_str:
+                coords = location_str.split(",")
+                if len(coords) == 2:
+                    lat, lon = map(float, [coords[0].split(":")[1].strip(), coords[1].split(":")[1].strip()])
+        except Exception:
+            pass
+
+    if lat is None or lon is None:
+        if json_data and "geoDataExif" in json_data:
+            geo = json_data["geoDataExif"]
+            lat = geo.get("latitude")
+            lon = geo.get("longitude")
+            try:
+                lat = float(lat) if lat is not None else None
+                lon = float(lon) if lon is not None else None
+            except (ValueError, TypeError):
+                lat, lon = None, None
 
     return lat, lon
 
@@ -166,7 +209,6 @@ def write_metadata_from_json(filepath, json_data):
                         location_str = f"Latitude: {lat}, Longitude: {lon}"
                         video["\xa9cmt"] = location_str
                         video.save()
-                        print(f"🌍 Localisation ajoutée au fichier MP4 : {filepath}")
             else:
                 pass
 
@@ -182,8 +224,8 @@ def write_metadata_from_json(filepath, json_data):
                     pass
 
         except Exception as e:
-            print(f"❌ Impossible d'ajouter les métadonnées au fichier MP4 {filepath}: {e}")
-
+            pass
+        
 def organize_photos(source_folder, move_duplicates=True, doublons_folder=None):
     if move_duplicates:
         doublons_folder = doublons_folder or os.path.join(source_folder, "Doublons")
@@ -216,24 +258,7 @@ def process_file(filepath, source_folder):
     filename = os.path.basename(filepath)
     json_data = read_json(filepath)
 
-    date_formatted = "Unknown_Date"
-    if json_data and "photoTakenTime" in json_data:
-        try:
-            timestamp = int(json_data["photoTakenTime"]["timestamp"])
-            date_obj = datetime.fromtimestamp(timestamp, datetime.UTC)
-            date_formatted = date_obj.strftime("%Y-%m-%d")
-        except Exception:
-            pass
-    else:
-        exif = get_exif_data(filepath)
-        date_str = exif.get("DateTimeOriginal") or exif.get("DateTime")
-        if date_str:
-            try:
-                date_obj = datetime.strptime(date_str, "%Y:%m:%d %H:%M:%S")
-                date_formatted = date_obj.strftime("%Y-%m-%d")
-            except Exception:
-                pass
-
+    date_formatted = get_date(filepath, json_data)
     lat, lon = get_lat_lon(filepath, json_data)
     location = get_location(lat, lon)
 
