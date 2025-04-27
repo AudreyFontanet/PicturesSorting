@@ -18,10 +18,13 @@ Ce script organise vos photos et vidéos (formats `.jpg`, `.jpeg`, `.png`, `.mp4
   - `mutagen` (pour manipuler les métadonnées des vidéos MP4)
   - `Pillow` (pour traiter les images)
   - `tqdm` (pour afficher une barre de progression)
+  - `ffmpeg` (pour manipuler les métadonnées des autres format vidéo)
 
-Vous pouvez installer ces bibliothèques via pip :
+Téléchargez ffmpeg ici : https://ffmpeg.org/download.html.
+Assurez-vous que ffmpeg est installé et que le binaire est dans le PATH de votre système
+Ensuite, vous pouvez installer ces bibliothèques via pip :
 ```bash
-pip install geopy piexif mutagen Pillow tqdm
+pip install geopy piexif mutagen Pillow tqdm ffmpeg-python
 ```
 
 ## Procédure pour télécharger les photos et vidéos de Google Photos via Google Takeout
@@ -51,6 +54,4 @@ YYYY-MM-DD_Location
 ```
 Où `YYYY-MM-DD` est la date de prise de vue et `Location` est le lieu associé.
 
-## Avertissements
-- Le script ne modifie que les fichiers EXIF des photos et les métadonnées des vidéos MP4 (en ajoutant la géolocalisation).
-- Assurez-vous de ne pas avoir de fichiers en double dans le dossier source, sauf si vous souhaitez qu'ils soient déplacés dans le dossier des doublons.
+Les metadonnées ou EXIF des fichiers organisés contiendront la géolocalisation extraite. 
