@@ -8,6 +8,8 @@ from PIL.ExifTags import TAGS, GPSTAGS
 from geopy.geocoders import Nominatim
 from datetime import datetime
 from tqdm import tqdm
+from mutagen.mp4 import MP4  # Ajout pour manipuler les MP4
+from mutagen.id3 import ID3, TIT2
 
 # Variable globale pour le geolocator
 geolocator = None
@@ -122,6 +124,10 @@ def clean_exif_dict(exif_dict):
     return exif_dict
 
 def write_exif_from_json(filepath, json_data):
+    # Si le fichier est un MP4, ne pas utiliser piexif
+    if filepath.lower().endswith(".mp4"):
+        return
+
     if not json_data:
         return
 
@@ -130,7 +136,7 @@ def write_exif_from_json(filepath, json_data):
     if "photoTakenTime" in json_data:
         try:
             timestamp = int(json_data["photoTakenTime"]["timestamp"])
-            dt = datetime.fromtimestamp(timestamp, datetime.UTC)
+            dt = datetime.utcfromtimestamp(timestamp)
             dt_str = dt.strftime("%Y:%m:%d %H:%M:%S")
             exif_dict['Exif'][piexif.ExifIFD.DateTimeOriginal] = dt_str.encode('utf-8')
             exif_dict['0th'][piexif.ImageIFD.DateTime] = dt_str.encode('utf-8')
@@ -153,6 +159,28 @@ def write_exif_from_json(filepath, json_data):
     exif_dict = clean_exif_dict(exif_dict)
     exif_bytes = piexif.dump(exif_dict)
     piexif.insert(exif_bytes, filepath)
+
+def add_location_to_mp4(filepath, lat, lon):
+    # Vérification que le fichier est bien un fichier MP4
+    if not filepath.lower().endswith(".mp4"):
+        return
+
+    try:
+        # Ouvrir le fichier MP4
+        video = MP4(filepath)
+
+        # Créer une chaîne de localisation (par exemple "Latitude: 48.8566, Longitude: 2.3522")
+        location_str = f"Latitude: {lat}, Longitude: {lon}"
+
+        # Ajouter cette information dans les métadonnées
+        video["\xa9cmt"] = location_str  # "\xa9cmt" est le tag de commentaire dans MP4
+
+        # Sauvegarder les changements
+        video.save()
+
+        print(f"🌍 Localisation ajoutée au fichier MP4 : {filepath}")
+    except Exception as e:
+        print(f"❌ Impossible d'ajouter la localisation à {filepath}: {e}")
 
 def organize_photos(source_folder, move_duplicates=True, doublons_folder=None):
     if move_duplicates:
@@ -193,7 +221,7 @@ def process_file(filepath, source_folder):
     if json_data and "photoTakenTime" in json_data:
         try:
             timestamp = int(json_data["photoTakenTime"]["timestamp"])
-            date_obj = datetime.fromtimestamp(timestamp, datetime.UTC)
+            date_obj = datetime.utcfromtimestamp(timestamp)
             date_formatted = date_obj.strftime("%Y-%m-%d")
         except Exception:
             pass
@@ -209,6 +237,11 @@ def process_file(filepath, source_folder):
 
     lat, lon = get_lat_lon(filepath, json_data)
     location = get_location(lat, lon)
+
+    # Ajout des métadonnées de géolocalisation dans les MP4
+    if filepath.lower().endswith(".mp4"):
+        add_location_to_mp4(filepath, lat, lon)
+    
     folder_name = f"{date_formatted}_{location}"
     folder_path = os.path.join(source_folder, folder_name)
     os.makedirs(folder_path, exist_ok=True)
@@ -216,34 +249,3 @@ def process_file(filepath, source_folder):
     destination = os.path.join(folder_path, filename)
     if os.path.abspath(filepath) != os.path.abspath(destination):
         shutil.move(filepath, destination)
-
-def move_to_doublons(filepath, doublons_folder):
-    filename = os.path.basename(filepath)
-    doublon_path = os.path.join(doublons_folder, filename)
-    count = 1
-    while os.path.exists(doublon_path):
-        name, ext = os.path.splitext(filename)
-        doublon_path = os.path.join(doublons_folder, f"{name}_dup{count}{ext}")
-        count += 1
-    shutil.move(filepath, doublon_path)
-
-if __name__ == "__main__":
-    source_folder = input("📁 Chemin vers le dossier contenant les photos : ").strip('"')
-    if not os.path.isdir(source_folder):
-        print("❌ Dossier introuvable. Vérifie le chemin.")
-        exit(1)
-
-    move_dup_input = input("❓ Voulez-vous déplacer les doublons ? (oui/non) : ").strip().lower()
-    move_duplicates = move_dup_input in ["oui", "o", "yes", "y"]
-
-    doublons_folder = None
-    if move_duplicates:
-        custom_path = input("📁 Chemin du dossier pour les doublons (laisser vide pour défaut) : ").strip('"')
-        if custom_path:
-            doublons_folder = os.path.abspath(custom_path)
-
-    user_agent_email = input("✉️ Entrez votre adresse email pour le user-agent Nominatim : ").strip()
-    geolocator = Nominatim(user_agent=user_agent_email)
-
-    organize_photos(source_folder, move_duplicates, doublons_folder)
-    print("✅ Organisation terminée !")
