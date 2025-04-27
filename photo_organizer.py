@@ -2,7 +2,6 @@ import os
 import json
 import shutil
 import hashlib
-import subprocess
 import piexif
 from PIL import Image
 from PIL.ExifTags import TAGS, GPSTAGS
@@ -59,7 +58,7 @@ def get_lat_lon(filepath, json_data):
         except (ValueError, TypeError):
             lat, lon = None, None
 
-    if lat is None or lon is None and filepath.lower().endswith((".jpg", ".jpeg", ".png")):
+    if lat is None or lon is None:
         exif = get_exif_data(filepath)
         gps_info = exif.get("GPSInfo", {})
         if gps_info:
@@ -131,7 +130,7 @@ def write_exif_from_json(filepath, json_data):
     if "photoTakenTime" in json_data:
         try:
             timestamp = int(json_data["photoTakenTime"]["timestamp"])
-            dt = datetime.utcfromtimestamp(timestamp)
+            dt = datetime.fromtimestamp(timestamp, datetime.UTC)
             dt_str = dt.strftime("%Y:%m:%d %H:%M:%S")
             exif_dict['Exif'][piexif.ExifIFD.DateTimeOriginal] = dt_str.encode('utf-8')
             exif_dict['0th'][piexif.ImageIFD.DateTime] = dt_str.encode('utf-8')
@@ -155,37 +154,6 @@ def write_exif_from_json(filepath, json_data):
     exif_bytes = piexif.dump(exif_dict)
     piexif.insert(exif_bytes, filepath)
 
-def write_metadata_video(filepath, json_data):
-    if not json_data:
-        return
-
-    commands = ["exiftool"]
-
-    if "photoTakenTime" in json_data:
-        try:
-            timestamp = int(json_data["photoTakenTime"]["timestamp"])
-            dt = datetime.utcfromtimestamp(timestamp)
-            dt_str = dt.strftime("%Y:%m:%d %H:%M:%S")
-            commands += ["-DateTimeOriginal=" + dt_str]
-        except Exception:
-            pass
-
-    if "geoDataExif" in json_data:
-        geo = json_data["geoDataExif"]
-        lat = geo.get("latitude")
-        lon = geo.get("longitude")
-        if lat is not None and lon is not None:
-            commands += [f"-GPSLatitude={lat}", f"-GPSLongitude={lon}"]
-            commands += ["-GPSLatitudeRef=N" if lat >= 0 else "-GPSLatitudeRef=S"]
-            commands += ["-GPSLongitudeRef=E" if lon >= 0 else "-GPSLongitudeRef=W"]
-
-    commands += ["-overwrite_original", filepath]
-
-    try:
-        subprocess.run(commands, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    except subprocess.CalledProcessError as e:
-        print(f"Erreur lors de l'écriture des métadonnées sur vidéo {filepath}: {e}")
-
 def organize_photos(source_folder, move_duplicates=True, doublons_folder=None):
     if move_duplicates:
         doublons_folder = doublons_folder or os.path.join(source_folder, "Doublons")
@@ -194,12 +162,12 @@ def organize_photos(source_folder, move_duplicates=True, doublons_folder=None):
     size_dict = {}
     for root, _, files in os.walk(source_folder):
         for filename in files:
-            if filename.lower().endswith((".jpg", ".jpeg", ".png", ".mp4", ".mov")):
+            if filename.lower().endswith((".jpg", ".jpeg", ".png", ".mp4")):
                 filepath = os.path.join(root, filename)
                 size = os.path.getsize(filepath)
                 size_dict.setdefault(size, []).append(filepath)
 
-    for size, filepaths in tqdm(size_dict.items(), desc="Organisation des fichiers"):
+    for size, filepaths in tqdm(size_dict.items(), desc="Organisation des photos"):
         if len(filepaths) == 1:
             filepath = filepaths[0]
             process_file(filepath, source_folder)
@@ -219,20 +187,17 @@ def process_file(filepath, source_folder):
     json_data = read_json(filepath)
 
     if json_data:
-        if filepath.lower().endswith((".jpg", ".jpeg", ".png")):
-            write_exif_from_json(filepath, json_data)
-        elif filepath.lower().endswith((".mp4", ".mov")):
-            write_metadata_video(filepath, json_data)
+        write_exif_from_json(filepath, json_data)
 
     date_formatted = "Unknown_Date"
     if json_data and "photoTakenTime" in json_data:
         try:
             timestamp = int(json_data["photoTakenTime"]["timestamp"])
-            date_obj = datetime.utcfromtimestamp(timestamp)
+            date_obj = datetime.fromtimestamp(timestamp, datetime.UTC)
             date_formatted = date_obj.strftime("%Y-%m-%d")
         except Exception:
             pass
-    elif filepath.lower().endswith((".jpg", ".jpeg", ".png")):
+    else:
         exif = get_exif_data(filepath)
         date_str = exif.get("DateTimeOriginal") or exif.get("DateTime")
         if date_str:
@@ -263,7 +228,7 @@ def move_to_doublons(filepath, doublons_folder):
     shutil.move(filepath, doublon_path)
 
 if __name__ == "__main__":
-    source_folder = input("📁 Chemin vers le dossier contenant les fichiers : ").strip('"')
+    source_folder = input("📁 Chemin vers le dossier contenant les photos : ").strip('"')
     if not os.path.isdir(source_folder):
         print("❌ Dossier introuvable. Vérifie le chemin.")
         exit(1)
